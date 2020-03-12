@@ -1,0 +1,16 @@
+# Listing and object files
+Listings/
+Objects/
+*.uvguix.*
+
+/.settings/*
+/*.bak
+/dummy.uvgui.*
+*.xlsx
+*.o
+*.d
+*.crf
+*.map
+*.htm
+*.lnp
+*.dep
