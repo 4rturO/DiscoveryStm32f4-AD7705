@@ -2,6 +2,7 @@
 #include "stm32f4xx.h"
 #include <stdbool.h>
 
+#define ARR_LENGTH(arr) (sizeof(arr)/sizeof(arr[0]))
 
 #define RX_QUEUE_ID 0
 #define TX_QUEUE_ID 1

@@ -1,32 +1,61 @@
 #include "main.h"
 #include "ad7705.h"
+#include "queue.h"
+
+
+TxMessage_t txMessage[24];
+TxMessage_t txMsg;
 
 int main( void )
 {
     __disable_irq();
+    
+    Queue_t * txQueue;
+    txQueue = queueGetId(TX_QUEUE_ID);
+    queueInit(txQueue, &txMessage, ARR_LENGTH(txMessage), sizeof(TxMessage_t));
+    
+    //диоды на отладочной плате
     initDiods();
-    initSPI();
+    initAD7705();
     
     GREEN_ON
 
-//    /* Disable DMA SPI TX Stream */
-//    DMA_Cmd(DMA1_Stream4, DISABLE);
-
-//    /* Disable DMA SPI RX Stream */
-//    DMA_Cmd(DMA1_Stream3, DISABLE);  
-
-//    /* Disable SPI DMA TX Requsts */
-//    SPI_I2S_DMACmd(SPI2, SPI_I2S_DMAReq_Tx, DISABLE);
-
-//    /* Disable SPI DMA RX Requsts */
-//    SPI_I2S_DMACmd(SPI2, SPI_I2S_DMAReq_Rx, DISABLE);
-
-//    /* Disable the SPI peripheral */
-//    SPI_Cmd(SPI2, DISABLE); 
-
+    //взятие из очереди - внешняя функция из queue.c
+    //Queue_t *queueRx = queueGetId(RX_QUEUE_ID);
+    Queue_t *queueTx = queueGetId(TX_QUEUE_ID);
+    TxMessage_t* txMessage  = getTxMessage();
+    
+    txMsg.Msg.selectedDevice = AD7705;
+    txMsg.Msg.length = 2;
+    txMsg.Msg.selectedRegister = CLOCK_REG;
+    txMsg.Msg.content[0] = ADC_500;
+    //занесение в очередь
+    queueEnqueue(queueTx, &txMsg);
+    
+    txMsg.Msg.selectedDevice = AD7705;
+    txMsg.Msg.length = 2;
+    txMsg.Msg.selectedRegister = SETUP_REG;
+    txMsg.Msg.content[0] = ADC_SELF|ADC_GAIN_1|ADC_BIPOLAR;
+    //занесение в очередь
+    queueEnqueue(queueTx, &txMsg);
+    
     __enable_irq();
+    
     while( 1 )
     {
+        
+        //вынимание из очереди
+        if( getSPITxStatus()==false )
+        {
+            if( queueDequeue(queueTx, txMessage) )
+            {
+                messageSend(txMessage);
+            }
+        }
+        if( getAD7705ReadeFlag()==true )
+        {
+            ORANGE_ON
+        }
     }
 }
 
