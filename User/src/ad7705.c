@@ -4,23 +4,43 @@
 #define TX_SIZE 4
 
 uint8_t rxBuffer[RX_SIZE] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
-uint8_t txBuffer[TX_SIZE] = {0x20, 0xC0|ADC_500, 0x10, ADC_SELF|ADC_GAIN_1|ADC_BIPOLAR};
+uint8_t txBuffer[TX_SIZE] = {0x20, ADC_500, 0x10, ADC_SELF|ADC_GAIN_1|ADC_BIPOLAR};
+
+void delay(){
+    for(uint32_t i = 0; i<400; i++)
+    {}
+}
 
 void SPI2_IRQHandler(void){
 
     static uint8_t counter = 0;
-    CS_DIS
-    if(SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_IT_TXE) != SET) {
-        CS_EN
-        SPI2->DR = txBuffer[counter++];
+    
+    if( (SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_TXE) == SET) && (SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_BSY) != SET) ) {
+        delay();
+        //CS_DIS
+        delay();
         if(counter == TX_SIZE)
         {
             SPI_ITConfig(SPI2, SPI_I2S_IT_TXE, DISABLE);
+            delay();
+            CS_DIS
+            //counter = 0;
         }
+        if( counter < TX_SIZE )
+        {
+            CS_EN
+            delay();
+            SPI2->DR = txBuffer[counter++];
+        }
+        
+        
+        //SPI2->SR = (uint16_t)~SPI_I2S_FLAG_TXE;
+        
     }
     
     if(SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_RXNE) == SET) {
-      rxBuffer[0] = SPI1->DR;
+        rxBuffer[0] = SPI1->DR;
+        SPI_I2S_ClearFlag(SPI2, SPI_I2S_FLAG_RXNE);
     }
 }
 //Rx
@@ -84,6 +104,12 @@ void initSPI( void ){
     RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB | RCC_AHB1Periph_DMA1, ENABLE);
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_SYSCFG, ENABLE);
     
+    /* Connect SPI pins to AF5 */  
+    GPIOB->AFR[1] |= 0x55500000;
+//    GPIO_PinAFConfig(GPIOB, GPIO_Pin_13, GPIO_AF_SPI2);
+//    GPIO_PinAFConfig(GPIOB, GPIO_Pin_15, GPIO_AF_SPI2);
+//    GPIO_PinAFConfig(GPIOB, GPIO_Pin_14, GPIO_AF_SPI2);
+
     /* GPIO for SPI configuration ----------------------------------------------*/
     GPIO_InitStructure.GPIO_Pin =  GPIO_Pin_13 | GPIO_Pin_14 | GPIO_Pin_15;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
@@ -97,8 +123,8 @@ void initSPI( void ){
     GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
     GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
     GPIO_Init(GPIOB, &GPIO_InitStructure);
-    CS_EN
-    GPIO_ResetBits(GPIOB, GPIO_Pin_10);
+    //CS_EN
+    GPIO_SetBits(GPIOB, GPIO_Pin_10);
     //GPIO_SetBits(GPIOB, GPIO_Pin_10|GPIO_Pin_12);
     
     GPIO_InitStructure.GPIO_Pin =  GPIO_Pin_11;
@@ -120,12 +146,7 @@ void initSPI( void ){
     NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0x0E;
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0x03;
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-    NVIC_Init(&NVIC_InitStructure);
-    
-      /* Connect SPI pins to AF5 */  
-//    GPIO_PinAFConfig(GPIOD, GPIO_Pin_13|GPIO_Pin_14|GPIO_Pin_15, GPIO_AF_SPI2);
-//    GPIO_PinAFConfig(GPIOD, GPIO_Pin_14, GPIO_AF_SPI2);    
-//    GPIO_PinAFConfig(GPIOD, GPIO_Pin_15, GPIO_AF_SPI2);
+    NVIC_Init(&NVIC_InitStructure); 
     
     SPI_InitTypeDef SPI_InitStructure;
     SPI_StructInit(&SPI_InitStructure);
@@ -142,6 +163,8 @@ void initSPI( void ){
     SPI_InitStructure.SPI_FirstBit = SPI_FirstBit_MSB;
     SPI_InitStructure.SPI_CRCPolynomial = 7;
     SPI_Init(SPI2, &SPI_InitStructure);
+    
+  
     
     /* Configure DMA Initialization Structure */
     DMA_InitStructure.DMA_BufferSize = RX_SIZE;
@@ -169,21 +192,21 @@ void initSPI( void ){
     DMA_Init(DMA1_Stream3, &DMA_InitStructure);
     
     /* Enable DMA SPI TX Stream */
-    DMA_Cmd(DMA1_Stream4,ENABLE);
+//DMA_Cmd(DMA1_Stream4,ENABLE);
 
     /* Enable DMA SPI RX Stream */
-    DMA_Cmd(DMA1_Stream3,ENABLE);  
+//    DMA_Cmd(DMA1_Stream3,ENABLE);  
 
 //    /* Enable SPI DMA TX Requsts */
 //    SPI_I2S_DMACmd(SPI2, SPI_I2S_DMAReq_Tx, ENABLE);
 
 //    /* Enable SPI DMA RX Requsts */
-    SPI_I2S_DMACmd(SPI2, SPI_I2S_DMAReq_Rx, ENABLE);
+//    SPI_I2S_DMACmd(SPI2, SPI_I2S_DMAReq_Rx, ENABLE);
 
 //    /* Enable the SPI peripheral */
     SPI_Cmd(SPI2, ENABLE);
-    DMA_ITConfig(DMA1_Stream3, DMA_IT_HT, ENABLE);
-    DMA_ITConfig(DMA1_Stream3, DMA_IT_TC, ENABLE);
+//    DMA_ITConfig(DMA1_Stream3, DMA_IT_HT, ENABLE);
+//    DMA_ITConfig(DMA1_Stream3, DMA_IT_TC, ENABLE);
 //    DMA_ITConfig(DMA1_Stream4, DMA_IT_HT, ENABLE);
 //    DMA_ITConfig(DMA1_Stream4, DMA_IT_TC, ENABLE);
 //    NVIC_EnableIRQ(DMA1_Stream3_IRQn);
