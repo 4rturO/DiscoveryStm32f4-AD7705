@@ -1,14 +1,16 @@
 #include "ad7705.h"
+#include "queue.h"
 
-#define RX_SIZE 6
+#define RX_SIZE 2
 #define TX_SIZE 4
 
-uint8_t rxBuffer[RX_SIZE] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+uint8_t rxBuffer[RX_SIZE];
 //uint8_t txBuffer[TX_SIZE] = {0x20, ADC_500, 0x10, ADC_SELF|ADC_GAIN_1|ADC_BIPOLAR};
 uint8_t txBuffer[TX_SIZE];
 
 TxMessage_t transferMsg;
 uint8_t transferSize;
+RxMessage_t rxMsg;
 
 //флаг истинный пока происходит передача сообщения
 static volatile bool txBusy = false;
@@ -16,9 +18,12 @@ static volatile bool txBusy = false;
 //флаг истинный если модуль АЦП подготовил данные для передачи
 static volatile bool readyFlag = false;
 
-//функция задержки для передачи 
-void delaySPI(){
-    for(uint32_t i = 0; i<400; i++)
+//флаг чтения данных
+static volatile bool readFlag = false;
+
+void delay( void ){
+    
+    for( uint32_t i = 0; i<500; i++)
     {}
 }
 
@@ -27,7 +32,7 @@ bool getSPITxStatus(){
     return txBusy;
 }
 
-bool getAD7705ReadeFlag(){
+bool getAD7705ReadyFlag(){
     
     return readyFlag;
 }
@@ -39,9 +44,18 @@ TxMessage_t* getTxMessage()
 
 void messageSend(TxMessage_t* message){
     
+    //DMA_Cmd(DMA1_Stream3, DISABLE);
+    //!не понятно как без плясок с буфером сделать универсальную запись!
     txBuffer[0] = message->Msg.selectedRegister;
     txBuffer[1] = message->Msg.content[0];
     transferSize = message->Msg.length;
+    if(message->Msg.selectedRegister & AD7705_READ_REG)
+    {
+        readFlag = true;
+        SPI_ITConfig(SPI2, SPI_I2S_IT_RXNE, ENABLE);
+        //DMA1_Stream3->NDTR = transferSize;
+        //DMA_Cmd(DMA1_Stream3, ENABLE);
+    }
     //выбор устройства
     if(message->Msg.selectedDevice == AD7705)
     {
@@ -53,39 +67,60 @@ void messageSend(TxMessage_t* message){
 
 void SPI2_IRQHandler(void){
 
-    static uint8_t counter = 0;
+    static uint8_t counterTx = 0;
+    static uint8_t counterRx = 0;
     
     if( (SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_TXE) == SET) && (SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_BSY) != SET) ) {
         
-        if( counter < transferSize )
+        if( counterTx < transferSize )
         {  
             //побайтовая передача
-            SPI2->DR = txBuffer[counter++];
+            SPI2->DR = txBuffer[counterTx++];
         }
-        else if(counter == transferSize)
+        else if(counterTx >= transferSize)
         {
             //отключение прерывания
             SPI_ITConfig(SPI2, SPI_I2S_IT_TXE, DISABLE);
             //отключение выбора устройства
+//            if( txBuffer[0]& AD7705_READ_REG )
+//            { delay();}
             AD7705_CS_DIS
             //дописать сюда другие варианты
             
             //передатчик больше не занят
             txBusy = false;
-            counter = 0;
+            //начинается ожидание ответа от модуля
+            readyFlag = false;
+            counterTx = 0;
         }
         
     }
     
-    if(SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_RXNE) == SET) {
-        rxBuffer[0] = SPI1->DR;
+    if( (SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_RXNE) == SET) && readFlag ) {
+        if( counterRx<RX_SIZE )
+        {
+            rxBuffer[counterRx++] = SPI2->DR;
+        }
+        else
+        {
+            readFlag = false;
+            counterRx = 0;
+            SPI_ITConfig(SPI2, SPI_I2S_IT_RXNE, DISABLE);
+            //взятие из очереди - внешняя функция из queue.c
+            Queue_t *queueRx = queueGetId(RX_QUEUE_ID);
+            rxMsg.Msg.selectedDevice = AD7705;
+            rxMsg.Msg.length = 2;
+            rxMsg.Msg.content[0] = rxBuffer[0];
+            rxMsg.Msg.content[1] = rxBuffer[1];
+            if( queueEnqueue(queueRx, &rxMsg) == false )
+            {  RED_ON }
+        }
         SPI_I2S_ClearFlag(SPI2, SPI_I2S_FLAG_RXNE);
     }
 }
 //Rx
 void DMA1_Stream3_IRQHandler(void){
     
-    RED_ON
     if(DMA_GetITStatus(DMA1_Stream3, DMA_IT_HTIF3)==SET)
     {
         DMA_ClearITPendingBit(DMA1_Stream3, DMA_IT_HTIF3);
@@ -243,6 +278,7 @@ void initDMAforSPI( void ){
     DMA_InitStructure.DMA_Memory0BaseAddr =(uint32_t)&txBuffer ;
     DMA_Init(DMA1_Stream4, &DMA_InitStructure);
     /* Configure RX DMA */
+    DMA_InitStructure.DMA_Mode = DMA_Mode_Circular;
     DMA_InitStructure.DMA_BufferSize = RX_SIZE;
     DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralToMemory ;
     DMA_InitStructure.DMA_Memory0BaseAddr =(uint32_t)&rxBuffer ; 
@@ -258,15 +294,15 @@ void initDMAforSPI( void ){
 //    SPI_I2S_DMACmd(SPI2, SPI_I2S_DMAReq_Tx, ENABLE);
 
 //    /* Enable SPI DMA RX Requsts */
-//    SPI_I2S_DMACmd(SPI2, SPI_I2S_DMAReq_Rx, ENABLE);
+    SPI_I2S_DMACmd(SPI2, SPI_I2S_DMAReq_Rx, ENABLE);
 
 //    /* Enable the SPI peripheral */
     
 //    DMA_ITConfig(DMA1_Stream3, DMA_IT_HT, ENABLE);
-//    DMA_ITConfig(DMA1_Stream3, DMA_IT_TC, ENABLE);
+    DMA_ITConfig(DMA1_Stream3, DMA_IT_TC, ENABLE);
 //    DMA_ITConfig(DMA1_Stream4, DMA_IT_HT, ENABLE);
 //    DMA_ITConfig(DMA1_Stream4, DMA_IT_TC, ENABLE);
-//    NVIC_EnableIRQ(DMA1_Stream3_IRQn);
+    NVIC_EnableIRQ(DMA1_Stream3_IRQn);
 //    NVIC_EnableIRQ(DMA1_Stream4_IRQn);
 }
 

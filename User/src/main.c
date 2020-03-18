@@ -3,28 +3,35 @@
 #include "queue.h"
 
 
-TxMessage_t txMessage[24];
-TxMessage_t txMsg;
+TxMessage_t txMessageQueue[32];
+RxMessage_t rxMessageQueue[24];
+uint16_t ADCvalue;
 
 int main( void )
 {
     __disable_irq();
     
+    //Создание очередей
     Queue_t * txQueue;
     txQueue = queueGetId(TX_QUEUE_ID);
-    queueInit(txQueue, &txMessage, ARR_LENGTH(txMessage), sizeof(TxMessage_t));
+    queueInit(txQueue, &txMessageQueue, ARR_LENGTH(txMessageQueue), sizeof(TxMessage_t));
+    
+    Queue_t * rxQueue;
+    rxQueue = queueGetId(RX_QUEUE_ID);
+    queueInit(rxQueue, &rxMessageQueue, ARR_LENGTH(rxMessageQueue), sizeof(RxMessage_t));
     
     //диоды на отладочной плате
     initDiods();
+    
     initAD7705();
     
     GREEN_ON
 
     //взятие из очереди - внешняя функция из queue.c
-    //Queue_t *queueRx = queueGetId(RX_QUEUE_ID);
+    Queue_t *queueRx = queueGetId(RX_QUEUE_ID);
     Queue_t *queueTx = queueGetId(TX_QUEUE_ID);
-    TxMessage_t* txMessage  = getTxMessage();
     
+    TxMessage_t txMsg;
     txMsg.Msg.selectedDevice = AD7705;
     txMsg.Msg.length = 2;
     txMsg.Msg.selectedRegister = CLOCK_REG;
@@ -39,7 +46,14 @@ int main( void )
     //занесение в очередь
     queueEnqueue(queueTx, &txMsg);
     
+    //структура для вынимания из очереди
+    TxMessage_t* txMessage  = getTxMessage();
+    //структура для вынимания из очереди
+    RxMessage_t rxMsg;
+    RxMessage_t *rxMessage = &rxMsg;
+    
     __enable_irq();
+    
     
     while( 1 )
     {
@@ -52,10 +66,41 @@ int main( void )
                 messageSend(txMessage);
             }
         }
-        if( getAD7705ReadeFlag()==true )
+        if( getAD7705ReadyFlag() == true )
         {
+//            txMsg.Msg.selectedDevice = AD7705;
+//            txMsg.Msg.length = 1;
+//            txMsg.Msg.selectedRegister = DATA_16b_REG|AD7705_READ_REG;
+//            //занесение в очередь
+//            if( queueEnqueue(queueTx, &txMsg) == false )
+//            {  RED_ON }
+//            
+//            txMsg.Msg.selectedDevice = AD7705;
+//            txMsg.Msg.length = 2;
+//            txMsg.Msg.selectedRegister = 0x00;
+//            txMsg.Msg.content[0] = 0x0;
+//            //занесение в очередь
+//            if( queueEnqueue(queueTx, &txMsg) == false )
+//            {  RED_ON }
+            txMsg.Msg.selectedDevice = AD7705;
+            txMsg.Msg.length = 3;
+            txMsg.Msg.selectedRegister = DATA_16b_REG|AD7705_READ_REG;
+            txMsg.Msg.content[0] = 0x00;
+            txMsg.Msg.content[1] = 0x00;
+            //занесение в очередь
+            if( queueEnqueue(queueTx, &txMsg) == false )
+            {  RED_ON }
+            
             ORANGE_ON
         }
+        if( !queueIsEmpty(queueRx) )
+        {
+            if( queueDequeue(queueRx, rxMessage) )
+            {
+                ADCvalue = rxMessage->Msg.content[1] + (rxMessage->Msg.content[0]<<8);
+            }
+        }
+        
     }
 }
 

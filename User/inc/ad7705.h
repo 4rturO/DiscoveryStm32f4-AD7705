@@ -76,25 +76,37 @@ typedef enum {
 #define FIRST_MINUS_SECOND_MINUS 0x03
 
 typedef union {
-    uint8_t txData[4];
+    uint8_t txData[7];
     #pragma pack(push, 1)
     struct 
     {
         Device_t selectedDevice;             //[0]
         uint8_t length;                     //[1]
         uint8_t selectedRegister;           //[2]
-        uint8_t content[4];                 //[3]
+        uint8_t content[4];                 //[3-6]
     }Msg;
     #pragma pack(pop)
 }TxMessage_t;
+
+typedef union {
+    uint8_t rxData[7];
+    #pragma pack(push, 1)
+    struct 
+    {
+        Device_t selectedDevice;             //[0]
+        uint8_t length;                     //[1]
+        uint8_t selectedRegister;           //[2]
+        uint8_t content[4];                 //[3-6]
+    }Msg;
+    #pragma pack(pop)
+}RxMessage_t;
 
 void initAD7705( void );
 void initSPI( void );
 void initInterruptDRDY( void );
 void initDMAforSPI( void );
 void initDiods( void );
-void delaySPI( void );
 bool getSPITxStatus( void );
-bool getAD7705ReadeFlag( void );
+bool getAD7705ReadyFlag( void );
 TxMessage_t* getTxMessage( void );
 void messageSend(TxMessage_t* message);
