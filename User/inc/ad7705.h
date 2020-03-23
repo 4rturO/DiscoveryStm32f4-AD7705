@@ -101,6 +101,7 @@ typedef union {
     #pragma pack(pop)
 }RxMessage_t;
 
+bool writeAD7705(uint8_t regName, uint32_t regContain);
 void initAD7705( void );
 void initSPI( void );
 void initInterruptDRDY( void );

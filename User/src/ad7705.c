@@ -27,6 +27,42 @@ void delay( void ){
     {}
 }
 
+bool readAD7705(){
+     return true;
+}
+
+bool writeAD7705(uint8_t regName, uint32_t regContain){
+    
+    Queue_t *queueTx = queueGetId(TX_QUEUE_ID);
+    TxMessage_t txMsg;
+    
+    txMsg.Msg.selectedDevice = AD7705;
+    if( (regName&0x30) == OFFSET_24b_REG || regName == GAIN_24b_REG )
+    {
+        txMsg.Msg.length = 4;
+        txMsg.Msg.selectedRegister = regName;
+        txMsg.Msg.content[0] = regContain;
+        txMsg.Msg.content[1] = regContain>>8;
+        txMsg.Msg.content[2] = regContain>>16;
+    }
+    else if( (regName&0x30) == DATA_16b_REG )  //можно ли записывать в DataRegister?
+    {
+        txMsg.Msg.length = 3;
+        txMsg.Msg.selectedRegister = regName;
+        txMsg.Msg.content[0] = regContain;
+        txMsg.Msg.content[1] = regContain>>8;
+    }
+    else
+    {
+        txMsg.Msg.length = 2;
+        txMsg.Msg.selectedRegister = regName;
+        txMsg.Msg.content[0] = regContain;
+    }
+    
+    //занесение в очередь
+    return queueEnqueue(queueTx, &txMsg);
+}
+
 bool getSPITxStatus(){
     
     return txBusy;
@@ -259,7 +295,6 @@ void initDMAforSPI( void ){
     DMA_InitTypeDef     DMA_InitStructure;
     DMA_StructInit(&DMA_InitStructure);
     
-    DMA_InitStructure.DMA_BufferSize = RX_SIZE;
     DMA_InitStructure.DMA_FIFOMode = DMA_FIFOMode_Disable ;
     DMA_InitStructure.DMA_FIFOThreshold = DMA_FIFOThreshold_1QuarterFull ;
     DMA_InitStructure.DMA_MemoryBurst = DMA_MemoryBurst_Single ;
