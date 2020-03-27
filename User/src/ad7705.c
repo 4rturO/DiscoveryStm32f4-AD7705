@@ -21,16 +21,16 @@ static volatile bool readyFlag = false;
 //флаг чтения данных
 static volatile bool readFlag = false;
 
-void delay( void ){
-    
-    for( uint32_t i = 0; i<500; i++)
-    {}
-}
-
+//Функция чтения регистра AD7705 - заготовка.
+//Входные параметры: нет
+//Выходные параметры: нет
 bool readAD7705(){
      return true;
 }
 
+//Функция записи в регистр AD7705
+//Входные параметры: имя регистра, указатель на очередь
+//Выходные параметры: успешность записи в очередь (что не корректно! тогда надо назвать ф-ию writeAndAddInQueue или как-то так!)
 bool writeAD7705(uint8_t regName, uint32_t regContain){
     
     Queue_t *queueTx = queueGetId(TX_QUEUE_ID);
@@ -63,21 +63,33 @@ bool writeAD7705(uint8_t regName, uint32_t regContain){
     return queueEnqueue(queueTx, &txMsg);
 }
 
+//Получение статуса SPI канала Tx
+//Входные параметры: нет
+//Выходные параметры: состояние флага. ИСТИНА если канал занят
 bool getSPITxStatus(){
     
     return txBusy;
 }
 
+//Получение статуса готовности данных в AD7705
+//Входные параметры: нет
+//Выходные параметры: состояние флага. ИСТИНА если данные готовы для считывания
 bool getAD7705ReadyFlag(){
     
     return readyFlag;
 }
 
+//Возвращение указателя на передаваемое сообщение
+//Входные параметры: нет
+//Выходные параметры: указатель на сообщение
 TxMessage_t* getTxMessage()
 {
     return &transferMsg;
 }
 
+//Передача сообщения
+//Входные параметры: указатель на сообщение источник
+//Выходные параметры: нет
 void messageSend(TxMessage_t* message){
     
     //DMA_Cmd(DMA1_Stream3, DISABLE);
@@ -101,6 +113,9 @@ void messageSend(TxMessage_t* message){
     txBusy = true;
 }
 
+//Обработчик прерываний по каналу 2 SPI
+//Входные параметры: нет
+//Выходные параметры: нет
 void SPI2_IRQHandler(void){
 
     static uint8_t counterTx = 0;
@@ -117,9 +132,6 @@ void SPI2_IRQHandler(void){
         {
             //отключение прерывания
             SPI_ITConfig(SPI2, SPI_I2S_IT_TXE, DISABLE);
-            //отключение выбора устройства
-//            if( txBuffer[0]& AD7705_READ_REG )
-//            { delay();}
             AD7705_CS_DIS
             //дописать сюда другие варианты
             
@@ -154,7 +166,10 @@ void SPI2_IRQHandler(void){
         SPI_I2S_ClearFlag(SPI2, SPI_I2S_FLAG_RXNE);
     }
 }
-//Rx
+
+//Обработчик прерываний DMA по Rx SPI2
+//Входные параметры: нет
+//Выходные параметры: нет
 void DMA1_Stream3_IRQHandler(void){
     
     if(DMA_GetITStatus(DMA1_Stream3, DMA_IT_HTIF3)==SET)
@@ -167,7 +182,9 @@ void DMA1_Stream3_IRQHandler(void){
     }
 }
 
-//Tx
+//Обработчик прерываний DMA по Tx SPI2
+//Входные параметры: нет
+//Выходные параметры: нет
 void DMA1_Stream4_IRQHandler(void){
     
     if(DMA_GetITStatus(DMA1_Stream4, DMA_IT_HTIF4)==SET)
@@ -186,6 +203,9 @@ void DMA1_Stream4_IRQHandler(void){
     }
 }
 
+//Обработчик прерываний от ножки RDY AD7705
+//Входные параметры: нет
+//Выходные параметры: нет
 void EXTI15_10_IRQHandler(void){    
     
     if (EXTI_GetITStatus(EXTI_Line11) != RESET)
@@ -196,6 +216,9 @@ void EXTI15_10_IRQHandler(void){
 
 }
 
+//Инициализация AD7705
+//Входные параметры: нет
+//Выходные параметры: нет
 void initAD7705( void ){
 
     initSPI();
@@ -210,12 +233,9 @@ void initSPI( void ){
     GPIO_InitTypeDef    GPIO_InitStructure;
     GPIO_StructInit(&GPIO_InitStructure);
     // Настройка AF для ножек SPI
-    GPIOB->AFR[1] |= 0x55500000;
-    // Следующие функции не приводят к изменению регистра AFR
-    // Более того при попытке сконфигурировать биты для 14 пина контроллер падает в HardFault
-//    GPIO_PinAFConfig(GPIOB, GPIO_Pin_13, GPIO_AF_SPI2);
-//    GPIO_PinAFConfig(GPIOB, GPIO_Pin_15, GPIO_AF_SPI2);
-//    GPIO_PinAFConfig(GPIOB, GPIO_Pin_14, GPIO_AF_SPI2);
+    GPIO_PinAFConfig(GPIOB, GPIO_PinSource13, GPIO_AF_SPI2);
+    GPIO_PinAFConfig(GPIOB, GPIO_PinSource15, GPIO_AF_SPI2);
+    GPIO_PinAFConfig(GPIOB, GPIO_PinSource14, GPIO_AF_SPI2);
 
     GPIO_InitStructure.GPIO_Pin =  GPIO_Pin_13 | GPIO_Pin_14 | GPIO_Pin_15;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
@@ -256,6 +276,7 @@ void initSPI( void ){
     NVIC_EnableIRQ(SPI2_IRQn);
 }
 
+
 void initInterruptDRDY( void ){
     
     //DRDY - выход с модуля показывающий готовность к работе
@@ -287,6 +308,7 @@ void initInterruptDRDY( void ){
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure); 
 }
+
 
 void initDMAforSPI( void ){
     
@@ -340,6 +362,7 @@ void initDMAforSPI( void ){
     NVIC_EnableIRQ(DMA1_Stream3_IRQn);
 //    NVIC_EnableIRQ(DMA1_Stream4_IRQn);
 }
+
 
 void initDiods( void ){
     
