@@ -34,7 +34,6 @@ int main( void )
     
     writeAD7705(CLOCK_REG, ADC_500);
     writeAD7705(SETUP_REG, ADC_SELF|ADC_GAIN_1|ADC_BIPOLAR);
-    
      //структура для вынимания из очереди
     TxMessage_t* txMessage  = getTxMessage();
     //структура для вынимания из очереди
@@ -52,9 +51,10 @@ int main( void )
         {
             if( queueDequeue(queueTx, txMessage) )
             {
+                counter--;
                 messageSend(txMessage);
             }
-            counter--;
+            
         }
         if( getAD7705ReadyFlag() && ( getSPITxStatus()==false ) && testFlag )
         {
@@ -70,17 +70,15 @@ int main( void )
             if( queueDequeue(queueRx, rxMessage) )
             {
                 ADCvalue = rxMessage->Msg.content[1] + (rxMessage->Msg.content[0]<<8);
+                if( ADCvalue == 0x0400)
+                {
+                    BLUE_ON
+                }
+                else
+                {
+                    BLUE_OFF
+                }
             }
-        }
-        if(counter > 0)
-        {
-            BLUE_ON
-            GREEN_OFF
-        }
-        else
-        {
-            GREEN_ON
-            BLUE_OFF
         }
         
     }

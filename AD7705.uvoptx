@@ -210,6 +210,11 @@
           <WinNumber>2</WinNumber>
           <ItemText>rxMessage</ItemText>
         </Ww>
+        <Ww>
+          <count>5</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>counter</ItemText>
+        </Ww>
       </WatchWindow2>
       <MemoryWindow1>
         <Mm>

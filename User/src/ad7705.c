@@ -35,7 +35,7 @@ bool writeAD7705(uint8_t regName, uint32_t regContain){
     
     Queue_t *queueTx = queueGetId(TX_QUEUE_ID);
     TxMessage_t txMsg;
-    
+    //Для корректной работы нужно также поменять размер Rx сообщения
     txMsg.Msg.selectedDevice = AD7705;
     if( (regName&0x30) == OFFSET_24b_REG || regName == GAIN_24b_REG )
     {
