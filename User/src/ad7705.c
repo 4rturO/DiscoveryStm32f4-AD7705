@@ -1,11 +1,10 @@
 #include "ad7705.h"
 #include "queue.h"
 
-#define RX_SIZE 2
+#define RX_SIZE 4   //с запасом
 #define TX_SIZE 4
 
 uint8_t rxBuffer[RX_SIZE];
-//uint8_t txBuffer[TX_SIZE] = {0x20, ADC_500, 0x10, ADC_SELF|ADC_GAIN_1|ADC_BIPOLAR};
 uint8_t txBuffer[TX_SIZE];
 
 TxMessage_t transferMsg;
@@ -100,77 +99,24 @@ void messageSend(TxMessage_t* message){
     if(message->Msg.selectedRegister & AD7705_READ_REG)
     {
         readFlag = true;
-        SPI_ITConfig(SPI2, SPI_I2S_IT_RXNE, ENABLE);
-        //DMA1_Stream3->NDTR = transferSize;
-        //DMA_Cmd(DMA1_Stream3, ENABLE);
+        //SPI_ITConfig(SPI2, SPI_I2S_IT_RXNE, ENABLE);
+        DMA1_Stream3->NDTR = transferSize;
+        DMA_Cmd(DMA1_Stream3, ENABLE);
     }
     //выбор устройства
     if(message->Msg.selectedDevice == AD7705)
     {
         AD7705_CS_EN
     }
-    SPI_ITConfig(SPI2, SPI_I2S_IT_TXE, ENABLE);
+    DMA_Cmd(DMA1_Stream4,ENABLE);
+    //SPI_ITConfig(SPI2, SPI_I2S_IT_TXE, ENABLE);
     txBusy = true;
-}
-
-//Обработчик прерываний по каналу 2 SPI
-//Входные параметры: нет
-//Выходные параметры: нет
-void SPI2_IRQHandler(void){
-
-    static uint8_t counterTx = 0;
-    static uint8_t counterRx = 0;
-    
-    if( (SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_TXE) == SET) && (SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_BSY) != SET) ) {
-        
-        if( counterTx < transferSize )
-        {  
-            //побайтовая передача
-            SPI2->DR = txBuffer[counterTx++];
-        }
-        else if(counterTx >= transferSize)
-        {
-            //отключение прерывания
-            SPI_ITConfig(SPI2, SPI_I2S_IT_TXE, DISABLE);
-            AD7705_CS_DIS
-            //дописать сюда другие варианты
-            
-            //передатчик больше не занят
-            txBusy = false;
-            //начинается ожидание ответа от модуля
-            readyFlag = false;
-            counterTx = 0;
-        }
-        
-    }
-    
-    if( (SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_RXNE) == SET) && readFlag ) {
-        if( counterRx<RX_SIZE )
-        {
-            rxBuffer[counterRx++] = SPI2->DR;
-        }
-        else
-        {
-            readFlag = false;
-            counterRx = 0;
-            SPI_ITConfig(SPI2, SPI_I2S_IT_RXNE, DISABLE);
-            //взятие из очереди - внешняя функция из queue.c
-            Queue_t *queueRx = queueGetId(RX_QUEUE_ID);
-            rxMsg.Msg.selectedDevice = AD7705;
-            rxMsg.Msg.length = 2;
-            rxMsg.Msg.content[0] = rxBuffer[0];
-            rxMsg.Msg.content[1] = rxBuffer[1];
-            if( queueEnqueue(queueRx, &rxMsg) == false )
-            {  RED_ON }
-        }
-        SPI_I2S_ClearFlag(SPI2, SPI_I2S_FLAG_RXNE);
-    }
 }
 
 //Обработчик прерываний DMA по Rx SPI2
 //Входные параметры: нет
 //Выходные параметры: нет
-void DMA1_Stream3_IRQHandler(void){
+void SPI2_RX_DMA_HANDLER(void){
     
     if(DMA_GetITStatus(DMA1_Stream3, DMA_IT_HTIF3)==SET)
     {
@@ -178,6 +124,16 @@ void DMA1_Stream3_IRQHandler(void){
     }
     if(DMA_GetITStatus(DMA1_Stream3, DMA_IT_TCIF3)==SET)
     {
+        readFlag = false;
+        //взятие из очереди - внешняя функция из queue.c
+        Queue_t *queueRx = queueGetId(RX_QUEUE_ID);
+        rxMsg.Msg.selectedDevice = AD7705;
+        rxMsg.Msg.length = 2;
+        rxMsg.Msg.content[0] = rxBuffer[0];
+        rxMsg.Msg.content[1] = rxBuffer[1];
+        if( queueEnqueue(queueRx, &rxMsg) == false )
+        {  RED_ON }
+        DMA_Cmd(DMA1_Stream3, DISABLE);
         DMA_ClearITPendingBit(DMA1_Stream3, DMA_IT_TCIF3);
     }
 }
@@ -185,7 +141,7 @@ void DMA1_Stream3_IRQHandler(void){
 //Обработчик прерываний DMA по Tx SPI2
 //Входные параметры: нет
 //Выходные параметры: нет
-void DMA1_Stream4_IRQHandler(void){
+void SPI2_TX_DMA_HANDLER(void){
     
     if(DMA_GetITStatus(DMA1_Stream4, DMA_IT_HTIF4)==SET)
     {
@@ -197,7 +153,14 @@ void DMA1_Stream4_IRQHandler(void){
         while(SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_TXE) == RESET);
         while(SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_BSY) == SET);
         
-        BLUE_ON
+        AD7705_CS_DIS
+        //дописать сюда другие варианты
+        
+        //передатчик больше не занят
+        txBusy = false;
+        //начинается ожидание ответа от модуля
+        readyFlag = false;
+        
         DMA_Cmd(DMA1_Stream4, DISABLE);
         DMA_ClearITPendingBit(DMA1_Stream4, DMA_IT_TCIF4);
     }
@@ -219,7 +182,7 @@ void EXTI15_10_IRQHandler(void){
 //Инициализация AD7705
 //Входные параметры: нет
 //Выходные параметры: нет
-void initAD7705( void ){
+void initPeripheralsAD7705( void ){
 
     initSPI();
     initInterruptDRDY();
@@ -348,19 +311,22 @@ void initDMAforSPI( void ){
 //    DMA_Cmd(DMA1_Stream3,ENABLE);  
 
 //    /* Enable SPI DMA TX Requsts */
-//    SPI_I2S_DMACmd(SPI2, SPI_I2S_DMAReq_Tx, ENABLE);
+    SPI_I2S_DMACmd(SPI2, SPI_I2S_DMAReq_Tx, ENABLE);
 
 //    /* Enable SPI DMA RX Requsts */
     SPI_I2S_DMACmd(SPI2, SPI_I2S_DMAReq_Rx, ENABLE);
 
 //    /* Enable the SPI peripheral */
     
+    //Rx Interrupt
 //    DMA_ITConfig(DMA1_Stream3, DMA_IT_HT, ENABLE);
     DMA_ITConfig(DMA1_Stream3, DMA_IT_TC, ENABLE);
-//    DMA_ITConfig(DMA1_Stream4, DMA_IT_HT, ENABLE);
-//    DMA_ITConfig(DMA1_Stream4, DMA_IT_TC, ENABLE);
     NVIC_EnableIRQ(DMA1_Stream3_IRQn);
-//    NVIC_EnableIRQ(DMA1_Stream4_IRQn);
+    
+    //Tx Interrupt
+//    DMA_ITConfig(DMA1_Stream4, DMA_IT_HT, ENABLE);
+    DMA_ITConfig(DMA1_Stream4, DMA_IT_TC, ENABLE);
+    NVIC_EnableIRQ(DMA1_Stream4_IRQn);
 }
 
 

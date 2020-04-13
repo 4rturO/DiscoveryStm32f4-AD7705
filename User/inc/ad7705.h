@@ -75,6 +75,9 @@ typedef enum {
 #define FIRST_MINUS_FIRST_MINUS 0x02
 #define FIRST_MINUS_SECOND_MINUS 0x03
 
+#define SPI2_RX_DMA_HANDLER DMA1_Stream3_IRQHandler
+#define SPI2_TX_DMA_HANDLER DMA1_Stream4_IRQHandler
+
 typedef union {
     uint8_t txData[7];
     #pragma pack(push, 1)
@@ -102,7 +105,7 @@ typedef union {
 }RxMessage_t;
 
 bool writeAD7705(uint8_t regName, uint32_t regContain);
-void initAD7705( void );
+void initPeripheralsAD7705( void );
 void initSPI( void );
 void initInterruptDRDY( void );
 void initDMAforSPI( void );

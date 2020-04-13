@@ -24,7 +24,7 @@ int main( void )
     
     //диоды на отладочной плате
     initDiods();
-    initAD7705();
+    initPeripheralsAD7705();
     
     GREEN_ON
 
