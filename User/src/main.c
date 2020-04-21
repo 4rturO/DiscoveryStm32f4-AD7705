@@ -2,18 +2,12 @@
 #include "ad7705.h"
 #include "queue.h"
 
+TxMessage_t txMessageQueue[8];
+RxMessage_t rxMessageQueue[8];
 
-TxMessage_t txMessageQueue[24];
-RxMessage_t rxMessageQueue[24];
-uint16_t ADCvalue;
-bool testFlag = true;
-int16_t counter;
-
-int main( void )
+//Создание очередей под отправку и прием
+void createQueue( void )
 {
-    __disable_irq();
-    
-    //Создание очередей
     Queue_t * txQueue;
     txQueue = queueGetId(TX_QUEUE_ID);
     queueInit(txQueue, &txMessageQueue, ARR_LENGTH(txMessageQueue), sizeof(TxMessage_t));
@@ -21,66 +15,22 @@ int main( void )
     Queue_t * rxQueue;
     rxQueue = queueGetId(RX_QUEUE_ID);
     queueInit(rxQueue, &rxMessageQueue, ARR_LENGTH(rxMessageQueue), sizeof(RxMessage_t));
-    
-    //диоды на отладочной плате
-    initDiods();
-    initPeripheralsAD7705();
-    
-    GREEN_ON
+}
 
-    //взятие из очереди - внешняя функция из queue.c
-    Queue_t *queueRx = queueGetId(RX_QUEUE_ID);
-    Queue_t *queueTx = queueGetId(TX_QUEUE_ID);
-    
-    writeAD7705(CLOCK_REG, ADC_500);
-    writeAD7705(SETUP_REG, ADC_SELF|ADC_GAIN_1|ADC_BIPOLAR);
-     //структура для вынимания из очереди
-    TxMessage_t* txMessage  = getTxMessage();
-    //структура для вынимания из очереди
-    RxMessage_t rxMsg;
-    RxMessage_t *rxMessage = &rxMsg;
-    
+int main( void )
+{
+    __disable_irq();
+    createQueue();
+    initDiods(); //диоды на отладочной плате. Используются для отладки
+    initPeripheralsAD7705();
+    initAD7705();
     __enable_irq();
-    
     
     while( 1 )
     {
-        
-        //вынимание из очереди
-        if( getSPITxStatus()==false )
-        {
-            if( queueDequeue(queueTx, txMessage) )
-            {
-                counter--;
-                messageSend(txMessage);
-            }
-            
-        }
-        if( getAD7705ReadyFlag() && ( getSPITxStatus()==false ) && testFlag )
-        {
-            counter++;
-            if( writeAD7705(SETUP_REG|AD7705_READ_REG, 0x00) == false )
-            {  RED_ON }
-            //testFlag = false;
-            ORANGE_ON
-            
-        }
-        if( !queueIsEmpty(queueRx) )
-        {
-            if( queueDequeue(queueRx, rxMessage) )
-            {
-                ADCvalue = rxMessage->Msg.content[1] + (rxMessage->Msg.content[0]<<8);
-                if( ADCvalue == 0x0400)
-                {
-                    BLUE_ON
-                }
-                else
-                {
-                    BLUE_OFF
-                }
-            }
-        }
-        
+        dispatcherTxQueue();
+        dispatcherRxQueue();
+        dispatcherAD7705();
     }
 }
 

@@ -20,6 +20,80 @@ static volatile bool readyFlag = false;
 //флаг чтения данных
 static volatile bool readFlag = false;
 
+uint16_t ADCvalue;
+uint8_t testComm = 1;   //счетчик команд для тестового сценария
+
+//Диспетчер очереди для отправки
+//Сравнивает заполненность очередей и доступность ресурсов
+void dispatcherTxQueue( void )
+{
+    //взятие из очереди - queue.c
+    Queue_t *queueTx = queueGetId(TX_QUEUE_ID);
+    
+    //структура для вынимания из очереди
+    //TxMessage_t* txMessage  = getTxMessage();
+    static TxMessage_t* txMessage;
+    txMessage  = getTxMessage();
+    
+    
+    //отправка из очереди
+    if( getSPITxStatus()==false )
+    {
+        if( queueDequeue(queueTx, txMessage) )
+        {
+            messageSend(txMessage);
+        }
+    }
+}
+
+//Диспетчер очереди для приема
+//Проверяет, пришло ли сообщение
+void dispatcherRxQueue( void )
+{
+    //взятие из очереди - queue.c
+    Queue_t *queueRx = queueGetId(RX_QUEUE_ID);
+    
+    //структура для вынимания из очереди
+    RxMessage_t rxMsg;
+    RxMessage_t *rxMessage = &rxMsg;
+    
+    //прием из очереди
+    if( !queueIsEmpty(queueRx) )
+    {
+        if( queueDequeue(queueRx, rxMessage) )
+        {
+            ADCvalue = rxMessage->Msg.content[0] + (rxMessage->Msg.content[1]<<8);
+            if( ADCvalue == (DEF_SETUP_REG) )
+            { BLUE_ON }
+            else
+            { BLUE_OFF }
+        }
+    }
+}
+
+//Диспетчер AD7705
+//Реализует управление FSM для AD7705
+void dispatcherAD7705( void )
+{
+    if( getAD7705ReadyFlag() && ( getSPITxStatus()==false ) )
+    {
+        if(testComm)
+        {
+            if( writeAD7705(SETUP_REG|AD7705_READ_REG, 0x00) == false )
+            {  RED_ON }
+            //testComm = 0;
+        }
+        
+    }  
+}
+
+//Инициализация AD7705 начальными значениями
+void initAD7705( void )
+{
+    writeAD7705(CLOCK_REG, DEF_CLOCK_REG);
+    writeAD7705(SETUP_REG, ADC_SELF|DEF_SETUP_REG);
+}
+
 //Функция чтения регистра AD7705 - заготовка.
 //Входные параметры: нет
 //Выходные параметры: нет

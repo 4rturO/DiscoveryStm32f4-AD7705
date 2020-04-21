@@ -78,6 +78,9 @@ typedef enum {
 #define SPI2_RX_DMA_HANDLER DMA1_Stream3_IRQHandler
 #define SPI2_TX_DMA_HANDLER DMA1_Stream4_IRQHandler
 
+#define DEF_CLOCK_REG ADC_500   //начальная установка регистра тактирования
+#define DEF_SETUP_REG ADC_GAIN_1|ADC_BIPOLAR   //начальная установка регистра настроек
+
 typedef union {
     uint8_t txData[7];
     #pragma pack(push, 1)
@@ -104,6 +107,10 @@ typedef union {
     #pragma pack(pop)
 }RxMessage_t;
 
+void dispatcherTxQueue( void );
+void dispatcherRxQueue( void );
+void dispatcherAD7705( void );
+void initAD7705( void );
 bool writeAD7705(uint8_t regName, uint32_t regContain);
 void initPeripheralsAD7705( void );
 void initSPI( void );
