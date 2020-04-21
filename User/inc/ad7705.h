@@ -14,9 +14,7 @@
 #define BLUE_ON GPIO_SetBits(GPIOD, GPIO_Pin_15);
 #define BLUE_OFF GPIO_ResetBits(GPIOD, GPIO_Pin_15);
 
-//Chip Select
-#define AD7705_CS_EN GPIO_ResetBits(GPIOB, GPIO_Pin_12);
-#define AD7705_CS_DIS GPIO_SetBits(GPIOB, GPIO_Pin_12);
+
 
 //Reset
 #define AD7705_EN GPIO_SetBits(GPIOB, GPIO_Pin_10);
@@ -75,8 +73,7 @@ typedef enum {
 #define FIRST_MINUS_FIRST_MINUS 0x02
 #define FIRST_MINUS_SECOND_MINUS 0x03
 
-#define SPI2_RX_DMA_HANDLER DMA1_Stream3_IRQHandler
-#define SPI2_TX_DMA_HANDLER DMA1_Stream4_IRQHandler
+
 
 #define DEF_CLOCK_REG ADC_500   //начальная установка регистра тактирования
 #define DEF_SETUP_REG ADC_GAIN_1|ADC_BIPOLAR   //начальная установка регистра настроек
@@ -107,17 +104,14 @@ typedef union {
     #pragma pack(pop)
 }RxMessage_t;
 
-void dispatcherTxQueue( void );
+
 void dispatcherRxQueue( void );
 void dispatcherAD7705( void );
 void initAD7705( void );
 bool writeAD7705(uint8_t regName, uint32_t regContain);
 void initPeripheralsAD7705( void );
-void initSPI( void );
 void initInterruptDRDY( void );
-void initDMAforSPI( void );
-void initDiods( void );
 bool getSPITxStatus( void );
 bool getAD7705ReadyFlag( void );
 TxMessage_t* getTxMessage( void );
-void messageSend(TxMessage_t* message);
+void setAD7705ReadyFlag( bool newState );

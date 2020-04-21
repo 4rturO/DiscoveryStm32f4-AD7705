@@ -395,6 +395,11 @@
               <FileType>1</FileType>
               <FilePath>.\User\src\queue.c</FilePath>
             </File>
+            <File>
+              <FileName>SPI.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\src\SPI.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
